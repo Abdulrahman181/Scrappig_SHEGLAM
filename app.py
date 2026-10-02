@@ -1,5 +1,6 @@
 import pandas as pd
 import re
+from pathlib import Path
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,8 +8,22 @@ import plotly.express as px
 import plotly.graph_objects as go
 from wordcloud import WordCloud
 
-# Load the data
-df = pd.read_csv("sheglam_products.csv")
+# Load the generated data from the project directory, regardless of the launch cwd.
+data_path = Path(__file__).resolve().with_name("sheglam_products.csv")
+if not data_path.is_file():
+    st.error("Required data file 'sheglam_products.csv' was not found.")
+    st.info("Run the scraping section in SHEGLAM_WEB_SCRAPING.ipynb and place its CSV next to app.py.")
+    st.stop()
+
+df = pd.read_csv(data_path)
+required_columns = {"Category", "Name", "Price", "Stars", "Subcategory", "Best Seller"}
+missing_columns = sorted(required_columns.difference(df.columns))
+if missing_columns:
+    st.error(f"The product CSV is missing required columns: {', '.join(missing_columns)}")
+    st.stop()
+if df.empty:
+    st.error("The product CSV contains no rows. Run the scraper and check its output.")
+    st.stop()
 
 # Streamlit Title and Website Link
 st.title("SHEGLAM Product Analysis Dashboard 💄")
@@ -17,8 +32,12 @@ st.markdown("[Visit Sheglam Website 🎀](https://www.sheglam.com/)")
 # Create tabs
 tab1, tab2, tab3 = st.tabs(["Main Dashboard", "Visualizations", "Collections Analysis"])
 
-# Clean Price column to numeric 💵
-df['Price'] = df['Price'].replace('[\\$,]', '', regex=True).astype(float)
+# Clean numeric columns without failing on blank or malformed scraped values.
+df['Price'] = pd.to_numeric(
+    df['Price'].astype('string').str.replace(r'[\\$,]', '', regex=True), errors='coerce'
+)
+df['Stars'] = pd.to_numeric(df['Stars'], errors='coerce')
+df['Best Seller'] = pd.to_numeric(df['Best Seller'], errors='coerce').fillna(0)
 
 # Sidebar filters 🛠
 with st.sidebar:
@@ -119,7 +138,7 @@ with tab2:
     # Best Seller vs Non-Best Seller
     st.header("Best Seller vs Non-Best Seller 📉")
     avg_values = df.groupby('Best Seller')[['Price', 'Stars']].mean().round(2)
-    avg_values.index = ['Non-Best Seller', 'Best Seller']
+    avg_values.index = avg_values.index.map({0: 'Non-Best Seller', 1: 'Best Seller'})
     st.dataframe(avg_values)
 
     fig = go.Figure(data=[
