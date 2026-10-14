@@ -1,54 +1,55 @@
-# Scraping_SHEGLAM
+# Scrapping SHEGLAM
 
-A Data Science project that leverages Selenium to scrape product data from the [SHEGLAM](https://www.sheglam.com/) website. The project focuses on collecting detailed information about products, including:
+A small, reproducible Python project for collecting and exploring SHEGLAM product
+metadata (name, price, category, rating, subcategory, and best-seller flag).
+The Streamlit dashboard reads a reviewed CSV export; it does **not** manufacture
+rows or metrics when the export is absent.
 
-- Product Names  
-- Prices  
-- Categories  
-- Ratings
+## Repository layout
 
----
+- `app.py` — Streamlit dashboard with guarded loading and empty-data handling.
+- `data_utils.py` — CSV path resolution, schema validation, and type cleaning.
+- `SHEGLAM_WEB_SCRAPING.ipynb` — clean, output-free analysis notebook.
+- `tests/test_data_utils.py` — offline tests for the data boundary.
+- `requirements.txt` — runtime dependencies.
 
-## Project Overview
+## Data contract
 
-This project demonstrates the end-to-end workflow of a real-world data science pipeline:
+Place a scraper export at `sheglam_products.csv` in the repository directory, or
+set `SHEGLAM_DATA_PATH` to an absolute or repository-relative CSV path. The CSV
+must contain these columns:
 
-1. Web Scraping  
-   Using `Selenium` to dynamically extract product details from the SHEGLAM website.
+`Category`, `Name`, `Price`, `Stars`, `Subcategory`, `Best Seller`
 
-2. Data Preprocessing  
-   Cleaning and organizing the raw scraped data using `pandas`.
+Prices may include `$` and commas. Ratings outside `0..5` and unrecognised
+best-seller flags are treated as missing, not replaced with guessed values. If the
+file is missing, empty, or lacks the required schema, the dashboard stops with an
+actionable message.
 
-3. Data Analysis & Visualization  
-   Exploring trends, price ranges, category distributions, and rating summaries using `matplotlib` and `seaborn`.
+## Local usage
 
-4. Interactive Dashboard  
-   Displaying insights via an interactive web app built with `Streamlit`.
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest -q
+streamlit run app.py
+```
 
----
+A browser driver and a working internet connection are required for live Selenium
+collection. The collection selectors are site-dependent and should be checked
+against the current SHEGLAM site before a fresh scrape. No scraped dataset is
+committed to this repository.
 
-## Live Demo
+## Reproducibility and scope
 
-Check out the live Streamlit dashboard here:  
-[Scraping SHEGLAM Dashboard](https://sheglam-mtzzprwatu9ibsx7wywcnu.streamlit.app/)
+The project is descriptive exploration, not a supervised ML model. There is no
+train/test split or predictive metric to report, and no leakage-safe model
+pipeline is claimed. Dashboard statistics are calculated only from the supplied
+CSV and are not evidence of causal effects.
 
----
+## Dashboard
 
-## Technologies Used
-
-- Python 3  
-- Selenium  
-- Pandas  
-- Matplotlib  
-- Seaborn  
-- Streamlit
-
----
-
-## Example Visualizations
-
-- Top-rated product categories  
-- Price distribution histograms  
-- Average rating per category  
-- Interactive product search
-
+An historical hosted dashboard link may be available in the project history, but
+local execution is the supported path. Do not rely on a hosted app for data
+freshness or reproducibility.
