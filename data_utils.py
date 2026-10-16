@@ -25,8 +25,6 @@ def _normalise_best_seller(series: pd.Series) -> pd.Series:
     """Convert common boolean/flag representations to nullable integers."""
     if pd.api.types.is_bool_dtype(series):
         return series.astype("Int64")
-    if pd.api.types.is_numeric_dtype(series):
-        return pd.to_numeric(series, errors="coerce").round().astype("Int64")
 
     values = series.astype("string").str.strip().str.lower()
     mapped = values.map(
@@ -41,11 +39,23 @@ def _normalise_best_seller(series: pd.Series) -> pd.Series:
             "n": 0,
         }
     )
+    # Accept numeric spellings such as ``1.0`` only when they are exactly
+    # integral flags.  Rounding arbitrary values (for example, 0.4 -> 0)
+    # would silently change source data.
+    numeric = pd.to_numeric(values, errors="coerce")
+    exact_numeric = numeric.where(numeric.isin([0, 1]))
+    mapped = mapped.fillna(exact_numeric)
     return mapped.astype("Int64")
 
 
 def validate_products(frame: pd.DataFrame) -> None:
     """Validate the minimum schema and usable content without creating values."""
+    duplicate_columns = frame.columns[frame.columns.duplicated()].tolist()
+    if duplicate_columns:
+        raise DataValidationError(
+            "CSV contains duplicate column label(s): "
+            + ", ".join(map(str, duplicate_columns))
+        )
     missing = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
     if missing:
         raise DataValidationError(
@@ -67,13 +77,27 @@ def clean_products(frame: pd.DataFrame) -> pd.DataFrame:
     validate_products(frame)
     cleaned = frame.copy()
     for column in ("Category", "Name", "Subcategory"):
-        cleaned[column] = cleaned[column].astype("string").str.strip()
+        cleaned[column] = (
+            cleaned[column].astype("string").str.strip().replace("", pd.NA)
+        )
 
     cleaned["Price"] = pd.to_numeric(
         cleaned["Price"].astype("string").str.replace(r"[$,]", "", regex=True),
         errors="coerce",
     )
+    # Negative or non-finite prices are not meaningful product prices and are
+    # kept missing rather than being clipped or otherwise guessed.
+    invalid_prices = cleaned["Price"].notna() & (
+        cleaned["Price"].lt(0)
+        | cleaned["Price"].isin([float("inf"), float("-inf")])
+    )
+    cleaned.loc[invalid_prices, "Price"] = pd.NA
     cleaned["Stars"] = pd.to_numeric(cleaned["Stars"], errors="coerce")
+    cleaned.loc[
+        cleaned["Stars"].notna()
+        & cleaned["Stars"].isin([float("inf"), float("-inf")]),
+        "Stars",
+    ] = pd.NA
     cleaned["Best Seller"] = _normalise_best_seller(cleaned["Best Seller"])
 
     invalid_stars = cleaned["Stars"].notna() & ~cleaned["Stars"].between(0, 5)
@@ -92,6 +116,11 @@ def load_products(path: str | Path) -> pd.DataFrame:
         )
     try:
         frame = pd.read_csv(csv_path)
-    except (OSError, UnicodeDecodeError, pd.errors.ParserError) as exc:
+    except (
+        OSError,
+        UnicodeDecodeError,
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError,
+    ) as exc:
         raise DataValidationError(f"Could not read product CSV '{csv_path}': {exc}") from exc
     return clean_products(frame)

@@ -119,26 +119,31 @@ with tab_visuals:
         )
         if category_stats.empty:
             st.info("No valid numeric data is available for category charts.")
+        elif category_stats["Price"].dropna().empty:
+            st.info("No valid prices are available for the category chart.")
         else:
             st.header("Average price and rating by category")
             fig, ax = plt.subplots(figsize=(10, 6))
+            price_stats = category_stats["Price"].dropna()
             sns.barplot(
-                x=category_stats.index,
-                y=category_stats["Price"],
+                x=price_stats.index,
+                y=price_stats,
                 color="#CCCCFF",
                 ax=ax,
             )
             ax.set_ylabel("Average price (USD)")
             ax.set_xlabel("Category")
             ax.tick_params(axis="x", rotation=45)
-            ax2 = ax.twinx()
-            ax2.plot(
-                category_stats.index,
-                category_stats["Stars"],
-                color="#B388EB",
-                marker="o",
-            )
-            ax2.set_ylabel("Average stars")
+            rating_stats = category_stats["Stars"].reindex(price_stats.index).dropna()
+            if not rating_stats.empty:
+                ax2 = ax.twinx()
+                ax2.plot(
+                    rating_stats.index,
+                    rating_stats,
+                    color="#B388EB",
+                    marker="o",
+                )
+                ax2.set_ylabel("Average stars")
             fig.tight_layout()
             st.pyplot(fig)
             plt.close(fig)
@@ -169,14 +174,15 @@ with tab_visuals:
             st.info("No valid Best Seller flags are available.")
         else:
             st.dataframe(seller_stats, use_container_width=True)
-            fig = go.Figure(
-                [
-                    go.Bar(x=seller_stats.index, y=seller_stats["Price"], name="Price"),
-                    go.Bar(x=seller_stats.index, y=seller_stats["Stars"], name="Stars"),
-                ]
-            )
-            fig.update_layout(barmode="group", yaxis_title="Average value")
-            st.plotly_chart(fig, use_container_width=True)
+            traces = []
+            for metric in ("Price", "Stars"):
+                values = seller_stats[metric].dropna()
+                if not values.empty:
+                    traces.append(go.Bar(x=values.index, y=values, name=metric))
+            if traces:
+                fig = go.Figure(traces)
+                fig.update_layout(barmode="group", yaxis_title="Average value")
+                st.plotly_chart(fig, use_container_width=True)
 
         st.header("Price and rating distributions")
         col_price, col_stars = st.columns(2)

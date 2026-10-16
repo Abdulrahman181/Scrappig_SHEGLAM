@@ -102,3 +102,70 @@ validate. I did not invent a dataset, scrape the live site, or report analytics 
 
 A local commit was created only in this checkout. No changes were pushed to GitHub and no
 other repository was modified.
+
+## Second Senior Review
+
+**Review date:** 2026-10-16
+**Reviewer scope:** all tracked source, tests, notebook JSON, README, requirements,
+repository configuration, Git history/diff, and the tracked PDF reference.
+
+### Findings and fixes
+
+1. **Empty CSV crash at the data boundary — fixed.** `pandas.errors.EmptyDataError`
+   was not handled, so a zero-byte export escaped as a traceback instead of the
+   dashboard's actionable validation error. `load_products()` now converts it to
+   `DataValidationError` alongside parser, filesystem, and encoding failures.
+2. **Best-seller coercion could fabricate flags — fixed.** Numeric values were rounded
+   before conversion, so values such as `0.4` could become `0`. Normalization now accepts
+   only explicit boolean values or exact `0`/`1` spellings (including `0.0`/`1.0`), and
+   leaves fractional/unknown values missing.
+3. **Invalid numeric values could pollute analysis — fixed.** Negative and infinite
+   prices, and infinite ratings, are now treated as missing. No clipping, imputation, or
+   guessed replacement is performed. Blank category/name/subcategory strings become
+   missing values, preventing an empty filter option or collection token.
+4. **Required schema ambiguity — fixed.** Duplicate column labels are rejected before
+   column access, avoiding pandas' ambiguous DataFrame-vs-Series behavior.
+5. **Visualization all-missing edge cases — fixed.** Category and seller charts now
+   omit all-missing metric series rather than handing NaN-only values to Seaborn or
+   Plotly. Existing empty-data messages remain fail-closed.
+6. **Notebook portability and state checks — fixed.** The notebook finds the repository
+   by walking current-directory parents and adds it to `sys.path`, so launching Jupyter
+   from a child directory does not silently import the wrong module. The project validator
+   now parses Python files under tests, verifies notebook format/cell types, rejects stored
+   outputs and execution counts, and checks for known stale local/database paths.
+7. **Test setup contract — fixed.** `pytest` is now declared in `requirements.txt`, matching
+   the documented validation command. Five additional offline tests cover empty files,
+   strict flag coercion, invalid/non-finite prices, and blank text normalization.
+8. **Plotting dependency compatibility — fixed.** A real Streamlit smoke test exposed that
+   an unconstrained NumPy/SciPy/PyArrow combination could fail during Seaborn or
+   `st.dataframe` import. Requirements now constrain NumPy/SciPy to a compatible modern
+   wheel range for the declared Streamlit stack. `pytest` coverage also includes duplicate
+   column labels (five new edge-case tests in total).
+
+### Validation performed in the second review
+
+- `python -m pytest -q` — **8 passed**.
+- `python validate_project.py` — **passed**, including recursive AST and notebook-state checks.
+- `python -m compileall -q app.py data_utils.py validate_project.py tests` — **passed**.
+- `ruff check .` — **passed** after the intentional notebook bootstrap import annotation.
+- `git diff --check` — **passed**.
+- Streamlit `AppTest` with a temporary two/three-row CSV — **passed with no exceptions**,
+  including missing-source and all-missing-price branches. A temporary `streamlit run`
+  health check also returned `ok`; no temporary data was committed.
+- Notebook inspection — **7 cells, 0 stored outputs, all code execution counts null**.
+- Edge probes — empty artifact, fractional flags, decimal flags, invalid prices, and blank
+  text all follow the documented missing-value behavior.
+- No product CSV, credentials, generated images, or tracked cache artifacts were added.
+
+### Remaining risks and explicit non-claims
+
+- No product CSV is present, so data-dependent dashboard execution and analytics cannot be
+  honestly claimed. No rows, metrics, or model performance were invented.
+- The repository still has no scraper implementation in the tracked source; the historical
+  PDF describes Selenium collection, but current selectors and live-site behavior remain
+  unverified. `selenium` remains a declared dependency for that external workflow only.
+- Streamlit and WordCloud were installed only in the disposable sandbox for the smoke test;
+  Selenium/live scraping and a full notebook kernel execution remain unverified. The smoke
+  test does not constitute a live-site or data-scale end-to-end claim.
+- This remains descriptive exploration, not a predictive ML pipeline; train/test leakage and
+  predictive metrics are therefore not applicable.
